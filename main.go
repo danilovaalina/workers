@@ -33,12 +33,12 @@ func main() {
 	signal.Notify(exit, os.Interrupt)
 
 	go func() {
-		defer close(jobs)
 		counter := 1
 		for {
 			select {
 			case <-exit:
 				fmt.Println("Received interrupt signal. Shutting down...")
+				close(jobs)
 				return
 			case jobs <- counter:
 				counter++
