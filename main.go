@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -8,10 +9,15 @@ import (
 	"sync"
 )
 
-func worker(id int, jobs <-chan int, wg *sync.WaitGroup) {
+func worker(ctx context.Context, id int, jobs <-chan int, wg *sync.WaitGroup) {
 	defer wg.Done()
-	for job := range jobs {
-		fmt.Printf("Worker %d received: %d\n", id, job)
+	for {
+		select {
+		case job := <-jobs:
+			fmt.Printf("worker %d received job %d\n", id, job)
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
@@ -25,20 +31,24 @@ func main() {
 	var wg sync.WaitGroup
 	wg.Add(num)
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	for i := 0; i < num; i++ {
-		go worker(i, jobs, &wg)
+		go worker(ctx, i, jobs, &wg)
 	}
 
 	exit := make(chan os.Signal, 1)
 	signal.Notify(exit, os.Interrupt)
 
 	go func() {
-		defer close(jobs)
 		counter := 1
 		for {
 			select {
 			case <-exit:
 				fmt.Println("Received interrupt signal. Shutting down...")
+				cancel()
+				close(jobs)
 				return
 			case jobs <- counter:
 				counter++
